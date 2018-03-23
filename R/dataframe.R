@@ -62,7 +62,7 @@ lime.data.frame <- function(x, model, bin_continuous = TRUE, n_bins = 4, quantil
       numeric = if (bin_continuous) {
         table(cut(x[[i]], unique(explainer$bin_cuts[[i]]), labels = FALSE, include.lowest = TRUE))/nrow(x)
       } else if (use_density) {
-        density(x[[i]])
+        density(x[[i]], na.rm = TRUE)
       } else {
         c(mean = mean(x[[i]], na.rm = TRUE), sd = sd(x[[i]], na.rm = TRUE))
       },
