@@ -109,7 +109,6 @@ explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
     kernel_width <- sqrt(ncol(x)) * 0.75
   }
   kernel <- exp_kernel(kernel_width)
-
   case_perm <- permute_cases(x, n_permutations, explainer$feature_distribution,
                              explainer$bin_continuous, explainer$bin_cuts,
                              explainer$use_density)
@@ -123,7 +122,7 @@ explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
     }
     perms <- numerify(case_perm[i, ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
     if (dist_fun != 'gower') {
-      sim <- kernel(c(0, dist(feature_scale(perms, explainer$feature_distribution, explainer$feature_type, explainer$bin_continuous),
+      sim <- kernel(c(0, dist(feature_scale(perms, explainer$feature_distribution, explainer$feature_type, explainer$bin_continuous, explainer$use_density),
                         method = dist_fun)[seq_len(n_permutations-1)]))
     }
     res <- model_permutations(as.matrix(perms), case_res[i, , drop = FALSE], sim, labels, n_labels, n_features, feature_select)
@@ -168,10 +167,17 @@ numerify <- function(x, type, bin_continuous, bin_cuts) {
   }), stringsAsFactors = FALSE), names(x))
 }
 #' @importFrom stats setNames
-feature_scale <- function(x, distribution, type, bin_continuous) {
+feature_scale <- function(x, distribution, type, bin_continuous, use_density) {
   setNames(as.data.frame(lapply(seq_along(x), function(i) {
-    if (type[i] == 'numeric' && !bin_continuous) {
-      scale(x[, i], distribution[[i]]['mean'], distribution[[i]]['sd'])
+    if (type[i] %in% c('numeric', 'integer') && !bin_continuous) {
+      if (use_density) {
+        mu <- weighted.mean(distribution[[i]]$x, distribution[[i]]$y)
+        x2 <- weighted.mean(distribution[[i]]$x**2, distribution[[i]]$y)
+        sigma <- sqrt(x2 - mu**2)
+        scale(x[, i], mu, sigma)
+      } else {
+        scale(x[, i], distribution[[i]]['mean'], distribution[[i]]['sd'])
+      }
     } else {
       x[, i]
     }
