@@ -35,6 +35,8 @@
 #' - `"tree"` : Fit a tree to select `n_features` (which needs to be a power of
 #'   2). It requires last version of `XGBoost`.
 #'
+#' @param n_threads The number of threads to use for parallel computing (1 by default, computes sequentially)
+#'
 #' @param ... Parameters passed on to the specific explainer
 #'
 #' @return A data.frame encoding the explanations one row per explained

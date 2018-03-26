@@ -83,6 +83,7 @@ lime.data.frame <- function(x, model, bin_continuous = TRUE, n_bins = 4, quantil
 #' [stats::dist()]
 #' @param kernel_width The width of the exponential kernel that will be used to
 #' convert the distance to a similarity in case `dist_fun != 'gower'`.
+#' @param n_threads The number of threads to use for parallel computing (1 by default, computes sequentially)
 #'
 #' @importFrom gower gower_dist
 #' @importFrom stats dist
@@ -90,7 +91,7 @@ lime.data.frame <- function(x, model, bin_continuous = TRUE, n_bins = 4, quantil
 explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
                                n_features, n_permutations = 5000,
                                feature_select = 'auto', dist_fun = 'gower',
-                               kernel_width = NULL, ...) {
+                               kernel_width = NULL, n_threads = 1, ...) {
   assert_that(is.data_frame_explainer(explainer))
   m_type <- model_type(explainer)
   o_type <- output_type(explainer)
@@ -115,27 +116,42 @@ explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
   case_res <- predict_model(explainer$model, case_perm, type = o_type)
   case_res <- set_labels(case_res, explainer$model)
   case_ind <- split(seq_len(nrow(case_perm)), rep(seq_len(nrow(x)), each = n_permutations))
-  res <- lapply(seq_along(case_ind), function(ind) {
-    i <- case_ind[[ind]]
-    if (dist_fun == 'gower') {
-      sim <- 1 - gower_dist(case_perm[i[1], , drop = FALSE], case_perm[i, , drop = FALSE])
+
+  # Register the multicore parallel backend setting the number of cores
+  cl <- snow::makeCluster(n_threads)
+  doSNOW::registerDoSNOW(cl)
+  # setup the progress bar
+  pb <- txtProgressBar(max = length(case_ind), style = 3)
+  progress <- function(n) setTxtProgressBar(pb, n)
+  opts <- list(progress = progress)
+
+  res <- foreach::`%dopar%`(foreach::foreach(ind = seq_along(case_ind), .combine = c, multicombine = TRUE,
+    .inorder = FALSE, .options.snow = opts),
+    {
+    # res <- lapply(seq_along(case_ind), function(ind) {
+      i <- case_ind[[ind]]
+      if (dist_fun == 'gower') {
+        sim <- 1 - gower_dist(case_perm[i[1], , drop = FALSE], case_perm[i, , drop = FALSE])
+      }
+      perms <- numerify(case_perm[i, ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
+      if (dist_fun != 'gower') {
+        sim <- kernel(c(0, dist(feature_scale(perms, explainer$feature_distribution, explainer$feature_type, explainer$bin_continuous, explainer$use_density),
+                          method = dist_fun)[seq_len(n_permutations-1)]))
+      }
+      res <- model_permutations(as.matrix(perms), case_res[i, , drop = FALSE], sim, labels, n_labels, n_features, feature_select)
+      res$feature_value <- unlist(case_perm[i[1], res$feature])
+      res$feature_desc <- describe_feature(res$feature, case_perm[i[1], ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
+      guess <- which.max(abs(case_res[i[1], ]))
+      res$case <- rownames(x)[ind]
+      res$label_prob <- unname(as.matrix(case_res[i[1], ]))[match(res$label, colnames(case_res))]
+      res$data <- list(as.list(case_perm[i[1], ]))
+      res$prediction <- list(as.list(case_res[i[1], ]))
+      res$model_type <- m_type
+      res
     }
-    perms <- numerify(case_perm[i, ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
-    if (dist_fun != 'gower') {
-      sim <- kernel(c(0, dist(feature_scale(perms, explainer$feature_distribution, explainer$feature_type, explainer$bin_continuous, explainer$use_density),
-                        method = dist_fun)[seq_len(n_permutations-1)]))
-    }
-    res <- model_permutations(as.matrix(perms), case_res[i, , drop = FALSE], sim, labels, n_labels, n_features, feature_select)
-    res$feature_value <- unlist(case_perm[i[1], res$feature])
-    res$feature_desc <- describe_feature(res$feature, case_perm[i[1], ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
-    guess <- which.max(abs(case_res[i[1], ]))
-    res$case <- rownames(x)[ind]
-    res$label_prob <- unname(as.matrix(case_res[i[1], ]))[match(res$label, colnames(case_res))]
-    res$data <- list(as.list(case_perm[i[1], ]))
-    res$prediction <- list(as.list(case_res[i[1], ]))
-    res$model_type <- m_type
-    res
-  })
+  )
+  close(pb)  # close the progress bar
+  snow::stopCluster(cl)  # stop the parallel backend
   res <- do.call(rbind, res)
   res <- res[, c('model_type', 'case', 'label', 'label_prob', 'model_r2', 'model_intercept', 'model_prediction', 'feature', 'feature_value', 'feature_weight', 'feature_desc', 'data', 'prediction')]
   if (m_type == 'regression') {

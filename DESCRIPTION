@@ -50,6 +50,8 @@ Suggests:
     rmarkdown,
     devtools,
     magick,
-    keras
+    keras,
+    snow,
+    doSNOW
 LinkingTo: Rcpp,
     RcppEigen

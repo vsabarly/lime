@@ -14,7 +14,7 @@
 
 \method{explain}{data.frame}(x, explainer, labels = NULL, n_labels = NULL,
   n_features, n_permutations = 5000, feature_select = "auto",
-  dist_fun = "gower", kernel_width = NULL, ...)
+  dist_fun = "gower", kernel_width = NULL, n_threads = 1, ...)
 
 explain(x, explainer, labels, n_labels = NULL, n_features,
   n_permutations = 5000, feature_select = "auto", ...)
@@ -67,6 +67,8 @@ it will use \code{\link[gower:gower_dist]{gower::gower_dist()}}. Otherwise it wi
 \item{kernel_width}{The width of the exponential kernel that will be used to
 convert the distance to a similarity in case \code{dist_fun != 'gower'}.}
 
+\item{n_threads}{The number of threads to use for parallel computing (1 by default, computes sequentially)}
+
 \item{n_superpixels}{The number of segments an image should be split into}
 
 \item{weight}{How high should locality be weighted compared to colour. High
@@ -81,6 +83,8 @@ permutation}
 \item{batch_size}{The number of explanations to handle at a time}
 
 \item{background}{The colour to use for blocked out superpixels}
+
+\item{n_threads}{The number of threads to use for parallel computing (1 by default, computes sequentially)}
 }
 \value{
 A data.frame encoding the explanations one row per explained
